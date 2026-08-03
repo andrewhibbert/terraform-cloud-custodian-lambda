@@ -61,7 +61,7 @@ locals {
     null
   ) : null
 
-  eventbridge_rule_mode = local.periodic_mode || local.cloudwatch_event_mode
+  eventbridge_mode = local.periodic_mode || local.cloudwatch_event_mode
 
   config_rule_mode = contains([
     "config-rule",
@@ -74,7 +74,7 @@ locals {
   ) : null
 
   lambda_permission_principal = (
-    local.eventbridge_rule_mode ? "events.amazonaws.com" :
+    local.eventbridge_mode ? "events.amazonaws.com" :
     local.schedule_mode ? "scheduler.amazonaws.com" :
     local.config_rule_mode ? "config.amazonaws.com" :
     null
@@ -157,8 +157,37 @@ resource "aws_lambda_function" "custodian" {
   }
 }
 
-resource "aws_cloudwatch_event_rule" "eventbridge_rule" {
-  for_each = local.eventbridge_rule_mode ? toset(local.regions) : []
+resource "aws_lambda_permission" "custodian" {
+  for_each = local.lambda_permission_principal != null ? toset(local.regions) : []
+  region   = each.key
+
+  statement_id  = local.function_name
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.custodian[each.key].function_name
+  principal     = local.lambda_permission_principal
+
+  source_arn = try(
+    aws_cloudwatch_event_rule.eventbridge[each.key].arn,
+    aws_scheduler_schedule.schedule[each.key].arn,
+    null
+  )
+}
+
+data "external" "cloudwatch_event" {
+  count = local.cloudwatch_event_mode ? 1 : 0
+  program = [
+    "python3",
+    "${path.module}/ops/get_cloudwatch_event_pattern.py"
+  ]
+  query = {
+    policies    = var.policies
+    policy_name = var.policy_name
+    valid       = data.external.validate_policy.result.valid
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "eventbridge" {
+  for_each = local.eventbridge_mode ? toset(local.regions) : []
   region   = each.key
 
   name        = local.function_name
@@ -168,11 +197,11 @@ resource "aws_cloudwatch_event_rule" "eventbridge_rule" {
   event_pattern       = local.cloudwatch_event_mode ? local.cloudwatch_event_pattern : null
 }
 
-resource "aws_cloudwatch_event_target" "eventbridge_rule" {
-  for_each = local.eventbridge_rule_mode ? toset(local.regions) : []
+resource "aws_cloudwatch_event_target" "eventbridge" {
+  for_each = local.eventbridge_mode ? toset(local.regions) : []
   region   = each.key
 
-  rule = aws_cloudwatch_event_rule.eventbridge_rule[each.key].name
+  rule = aws_cloudwatch_event_rule.eventbridge[each.key].name
   arn  = aws_lambda_function.custodian[each.key].arn
 }
 
@@ -203,19 +232,6 @@ resource "aws_scheduler_schedule" "schedule" {
   target {
     arn      = aws_lambda_function.custodian[each.key].arn
     role_arn = local.scheduler_role
-  }
-}
-
-data "external" "cloudwatch_event" {
-  count = local.cloudwatch_event_mode ? 1 : 0
-  program = [
-    "python3",
-    "${path.module}/ops/get_cloudwatch_event_pattern.py"
-  ]
-  query = {
-    policies    = var.policies
-    policy_name = var.policy_name
-    valid       = data.external.validate_policy.result.valid
   }
 }
 
@@ -255,20 +271,4 @@ resource "aws_config_config_rule" "config_rule" {
   }
 
   maximum_execution_frequency = contains(keys(local.config_rule_params), "MaximumExecutionFrequency") ? local.config_rule_params["MaximumExecutionFrequency"] : null
-}
-
-resource "aws_lambda_permission" "custodian" {
-  for_each = local.lambda_permission_principal != null ? toset(local.regions) : []
-  region   = each.key
-
-  statement_id  = local.function_name
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.custodian[each.key].function_name
-  principal     = local.lambda_permission_principal
-
-  source_arn = try(
-    aws_cloudwatch_event_rule.eventbridge_rule[each.key].arn,
-    aws_scheduler_schedule.schedule[each.key].arn,
-    null
-  )
 }

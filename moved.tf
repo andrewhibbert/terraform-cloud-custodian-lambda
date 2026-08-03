@@ -5,7 +5,7 @@ moved {
 
 moved {
   from = aws_cloudwatch_event_rule.cloudwatch_event
-  to   = aws_cloudwatch_event_rule.eventbridge_rule
+  to   = aws_cloudwatch_event_rule.eventbridge
 }
 
 moved {
@@ -15,7 +15,7 @@ moved {
 
 moved {
   from = aws_cloudwatch_event_target.cloudwatch_event
-  to   = aws_cloudwatch_event_target.eventbridge_rule
+  to   = aws_cloudwatch_event_target.eventbridge
 }
 
 moved {
