@@ -84,22 +84,22 @@ output "lambda_function_filename" {
 # Periodic Mode Outputs
 output "periodic_event_rule" {
   description = "Complete AWS Cloudwatch Event Rule for periodic resource with all attributes"
-  value       = local.periodic_mode ? aws_cloudwatch_event_rule.periodic : {}
+  value       = local.periodic_mode ? aws_cloudwatch_event_rule.eventbridge_rule : {}
 }
 
 output "periodic_event_rule_name" {
   description = "The name of the CloudWatch Event Rule for periodic mode"
-  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.periodic : region => rule.name } : {}
+  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.name } : {}
 }
 
 output "periodic_event_rule_arn" {
   description = "The ARN of the CloudWatch Event Rule for periodic mode"
-  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.periodic : region => rule.arn } : {}
+  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.arn } : {}
 }
 
 output "periodic_schedule_expression" {
   description = "The schedule expression for periodic mode"
-  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.periodic : region => rule.schedule_expression } : {}
+  value       = local.periodic_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.schedule_expression } : {}
 }
 
 # EventBridge Scheduler Mode Outputs
@@ -136,22 +136,22 @@ output "eventbridge_schedule_timezone" {
 # CloudWatch Event Mode Outputs
 output "cloudwatch_event_rule" {
   description = "Complete AWS Cloudwatch Event Rule for cloudwatch event resource with all attributes"
-  value       = local.cloudwatch_event_mode ? aws_cloudwatch_event_rule.cloudwatch_event : {}
+  value       = local.cloudwatch_event_mode ? aws_cloudwatch_event_rule.eventbridge_rule : {}
 }
 
 output "cloudwatch_event_rule_name" {
   description = "The name of the CloudWatch Event Rule for event mode"
-  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.cloudwatch_event : region => rule.name } : {}
+  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.name } : {}
 }
 
 output "cloudwatch_event_rule_arn" {
   description = "The ARN of the CloudWatch Event Rule for event mode"
-  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.cloudwatch_event : region => rule.arn } : {}
+  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.arn } : {}
 }
 
 output "cloudwatch_event_pattern" {
   description = "The event pattern for event mode"
-  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.cloudwatch_event : region => rule.event_pattern } : {}
+  value       = local.cloudwatch_event_mode ? { for region, rule in aws_cloudwatch_event_rule.eventbridge_rule : region => rule.event_pattern } : {}
 }
 
 # Config Rule Mode Outputs
