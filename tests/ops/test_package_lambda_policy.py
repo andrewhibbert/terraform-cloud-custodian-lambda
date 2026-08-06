@@ -9,6 +9,7 @@ import tempfile
 import pytest
 
 from unittest.mock import patch
+from c7n.config import Config
 from ops.package_lambda_policy import process_policies, ValidationError, process_exec_options
 
 from tests.ops.fixtures import (
@@ -21,6 +22,15 @@ from tests.ops.fixtures import (
     DETAILED_POLICIES_YAML,
     DETAILED_POLICY_DICT,
 )
+
+
+def fake_custodian_config(region=None, account_id=None):
+    """Stand in for get_custodian_config without calling AWS."""
+    return Config.empty(
+        region=region or "us-east-1",
+        regions=(region or "us-east-1",),
+        account_id=account_id or "123456789012",
+    )
 
 
 def test_get_archive_success():
@@ -108,9 +118,19 @@ def test_get_custodian_tags_schedule_mode():
 
 def test_process_policies_with_packages_and_tags():
     """Test parsing policy data with packages field."""
-    query = {"policies": DETAILED_POLICIES_YAML, "role": "test-role", "execution_options": {}}
+    query = {
+        "policies": DETAILED_POLICIES_YAML,
+        "role": "test-role",
+        "execution_options": {},
+        "regions": json.dumps(["us-east-1"]),
+    }
     with patch("ops.package_lambda_policy.get_regions", return_value=["us-east-1", "eu-west-1"]):
-        policy_list, regions, packages = process_policies(query)
+        with patch(
+            "ops.package_lambda_policy.get_custodian_config", side_effect=fake_custodian_config
+        ):
+            processed_policy, regions, packages = process_policies(query)
+
+        policy_list = processed_policy["us-east-1"]
         assert policy_list[0]["name"] == SIMPLE_PERIODIC_POLICY_DICT["name"]
 
         # Check packages
@@ -129,11 +149,16 @@ def test_process_policies_without_packages_and_tags():
     query = {
         "policies": SIMPLE_PERIODIC_POLICIES_YAML,
         "role": "test-role",
+        "regions": json.dumps(["us-east-1"]),
     }
 
     with patch("ops.package_lambda_policy.get_regions", return_value=["us-east-1", "eu-west-1"]):
+        with patch(
+            "ops.package_lambda_policy.get_custodian_config", side_effect=fake_custodian_config
+        ):
+            processed_policy, regions, packages = process_policies(query)
 
-        policy_list, regions, packages = process_policies(query)
+        policy_list = processed_policy["us-east-1"]
         assert policy_list[0]["name"] == SIMPLE_PERIODIC_POLICY_DICT["name"]
 
         # Check packages
@@ -225,18 +250,19 @@ def test_end_to_end_archive_creation():
         "region": "us-east-1",
         "function_name": "custoian-test-policy",
     }
-    policies = [SIMPLE_PERIODIC_POLICY_DICT]
+    processed_policy = {"us-east-1": [SIMPLE_PERIODIC_POLICY_DICT]}
     exec_options = {}
     regions = ["us-east-1"]
     packages = []
 
-    result = process_lambda_package(query, policies, regions, exec_options, packages)
+    result = process_lambda_package(query, processed_policy, regions, exec_options, packages)
 
     # Verify result structure
     assert "sha256_hex" in result
     assert "sha256_base64" in result
     assert "zip_path" in result
     assert "package_versions" in result
+    assert "zips" in result
 
     # Verify hashes are non-empty
     assert len(result["sha256_hex"]) > 0
@@ -244,6 +270,11 @@ def test_end_to_end_archive_creation():
 
     # Verify zip file exists
     assert os.path.exists(result["zip_path"])
+
+    # Verify the region map points at the same archive
+    zips = json.loads(result["zips"])
+    assert zips["us-east-1"]["path"] == result["zip_path"]
+    assert zips["us-east-1"]["sha256_base64"] == result["sha256_base64"]
 
     # Verify package versions
     package_versions = json.loads(result["package_versions"])
@@ -262,7 +293,7 @@ def test_process_lambda_package_checksum_error():
         "region": "us-east-1",
         "function_name": "custodian-test-policy",
     }
-    policies = [SIMPLE_PERIODIC_POLICY_DICT]
+    processed_policy = {"us-east-1": [SIMPLE_PERIODIC_POLICY_DICT]}
     exec_options = {}
     regions = ["us-east-1"]
     packages = []
@@ -273,7 +304,7 @@ def test_process_lambda_package_checksum_error():
         mock_create.return_value = mock_archive
 
         with pytest.raises(RuntimeError):
-            process_lambda_package(query, policies, regions, exec_options, packages)
+            process_lambda_package(query, processed_policy, regions, exec_options, packages)
 
 
 def test_process_exec_options_not_dict():
@@ -284,9 +315,9 @@ def test_process_exec_options_not_dict():
         process_exec_options(query)
 
 
-def test_get_policy_regions_with_conditions():
-    """Test get_policy_regions with a policy containing region conditions."""
-    from ops.package_lambda_policy import get_policy_regions
+def test_get_condition_regions_with_conditions():
+    """Test get_condition_regions with a policy containing region conditions."""
+    from ops.package_lambda_policy import get_condition_regions
     from ops.common import validate_with_custodian
 
     policies_dict = DETAILED_POLICIES_DICT
@@ -296,7 +327,7 @@ def test_get_policy_regions_with_conditions():
     with patch("ops.package_lambda_policy.get_regions") as mock_get_regions:
         mock_get_regions.return_value = ["us-east-1", "us-west-2", "eu-west-1"]
 
-        regions = get_policy_regions(policy_instance)
+        regions = get_condition_regions(policy_instance)
 
         assert "us-east-1" in regions
         assert "us-west-2" in regions
@@ -354,7 +385,7 @@ def test_main_success():
         "zip_path": os.path.join(tempfile.gettempdir(), "test.zip"),
         "package_versions": json.dumps({"c7n": "1.0.0"}),
         "custodian_tags": json.dumps({"custodian-info": "mode=periodic:version=0.9.0"}),
-        "policy_regions": json.dumps([]),
+        "condition_regions": json.dumps([]),
     }
 
     with patch("sys.stdin", io.StringIO(json.dumps(valid_input))):
@@ -476,3 +507,134 @@ def test_main_runtime_error(capsys):
                     assert exc_info.value.code == 1
                     captured = capsys.readouterr()
                     assert "Failed to package lambda" in captured.err
+
+
+VARIABLE_POLICIES_DICT = {
+    "policies": [
+        {
+            "name": "test-variables",
+            "resource": "ec2",
+            "mode": {
+                "type": "periodic",
+                "schedule": "rate(1 day)",
+                "role": "arn:aws:iam::123456789012:role/custodian-lambda",
+                "member-role": "arn:aws:iam::{account_id}:role/member",
+                "execution-options": {"output_dir": "s3://bucket/{account_id}/{region}/logs"},
+            },
+            "filters": [
+                {"type": "value", "key": "tag:Account", "value": "{account_id}"},
+                {"type": "value", "key": "tag:Region", "value": "{region}"},
+                {"type": "value", "key": "tag:Literal", "value": "{account}"},
+            ],
+        }
+    ]
+}
+
+
+def variable_query(regions):
+    return {
+        "policies": json.dumps(VARIABLE_POLICIES_DICT),
+        "role": "arn:aws:iam::123456789012:role/custodian-lambda",
+        "function_name": "custodian-test-variables",
+        "regions": json.dumps(regions),
+    }
+
+
+def process_variable_policies(regions):
+    with patch("ops.package_lambda_policy.get_regions", return_value=regions):
+        with patch(
+            "ops.package_lambda_policy.get_custodian_config", side_effect=fake_custodian_config
+        ) as mock_config:
+            return process_policies(variable_query(regions)) + (mock_config,)
+
+
+def test_process_policies_expands_account_id_and_region():
+    """Account id and region are resolved per region at package time."""
+    processed_policy, _, _ = process_variable_policies(["eu-west-1"])[:3]
+
+    filters = processed_policy["eu-west-1"][0]["filters"]
+    values = {f["key"]: f["value"] for f in filters}
+
+    assert values["tag:Account"] == "123456789012"
+    assert values["tag:Region"] == "eu-west-1"
+
+
+def test_process_policies_leaves_runtime_only_variables_alone():
+    """Variables Cloud Custodian resolves at runtime survive expansion."""
+    processed_policy, _, _ = process_variable_policies(["eu-west-1"])[:3]
+
+    policy = processed_policy["eu-west-1"][0]
+    filters = {f["key"]: f["value"] for f in policy["filters"]}
+
+    assert filters["tag:Literal"] == "{account}"
+    assert policy["mode"]["member-role"] == "arn:aws:iam::{account_id}:role/member"
+    assert (
+        policy["mode"]["execution-options"]["output_dir"]
+        == "s3://bucket/{account_id}/{region}/logs"
+    )
+
+
+def test_process_policies_uses_query_role():
+    """The role from the query wins over the expanded policy role."""
+    processed_policy, _, _ = process_variable_policies(["eu-west-1"])[:3]
+
+    assert (
+        processed_policy["eu-west-1"][0]["mode"]["role"]
+        == "arn:aws:iam::123456789012:role/custodian-lambda"
+    )
+
+
+def test_process_policies_resolves_account_id_once():
+    """The account id is resolved once and reused for every region."""
+    processed_policy, _, _, mock_config = process_variable_policies(["eu-west-1", "us-east-1"])
+
+    lookups = [c for c in mock_config.call_args_list if not c.kwargs.get("account_id")]
+    assert len(lookups) == 1
+    assert set(processed_policy) == {"eu-west-1", "us-east-1"}
+
+
+def test_process_lambda_package_one_archive_per_distinct_policy():
+    """Regions with differing content get their own archive, matching ones share."""
+    from ops.package_lambda_policy import process_lambda_package
+
+    regions = ["eu-west-1", "us-east-1"]
+    processed_policy, _, packages = process_variable_policies(regions)[:3]
+
+    result = process_lambda_package(
+        variable_query(regions), processed_policy, regions, {}, packages
+    )
+    zips = json.loads(result["zips"])
+
+    assert set(zips) == set(regions)
+    assert zips["eu-west-1"]["sha256_base64"] != zips["us-east-1"]["sha256_base64"]
+    for region in regions:
+        assert os.path.exists(zips[region]["path"])
+        os.unlink(zips[region]["path"])
+
+
+def test_process_lambda_package_shares_archive_when_content_matches():
+    """Regions whose expanded policy is identical share a single archive."""
+    from ops.package_lambda_policy import process_lambda_package
+
+    regions = ["eu-west-1", "us-east-1"]
+    policy_list = [SIMPLE_PERIODIC_POLICY_DICT]
+    processed_policy = {region: policy_list for region in regions}
+
+    result = process_lambda_package(
+        {"function_name": "custodian-shared"}, processed_policy, regions, {}, []
+    )
+    zips = json.loads(result["zips"])
+
+    assert zips["eu-west-1"]["path"] == zips["us-east-1"]["path"]
+    os.unlink(zips["eu-west-1"]["path"])
+
+
+def test_get_custodian_config_without_account_id():
+    """A config with no resolvable account id is rejected."""
+    from ops.common import get_custodian_config
+
+    with patch("ops.common.AWS") as mock_aws:
+        mock_aws.return_value.initialize.side_effect = lambda config: config
+
+        with pytest.raises(ValidationError, match="sts:GetCallerIdentity"):
+            get_custodian_config(region="eu-west-1")
