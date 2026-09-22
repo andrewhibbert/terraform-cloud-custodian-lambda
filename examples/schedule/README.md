@@ -1,3 +1,7 @@
+# Schedule
+
+Configuration in this directory creates an example cloud custodian schedule policy as a lambda.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
