@@ -23,6 +23,7 @@ import copy
 import hashlib
 import json
 import sys
+from collections import defaultdict
 
 from ops.common import (
     validate_policy_structure,
@@ -114,10 +115,10 @@ def process_lambda_package(query, processed_policy, condition_regions, exec_opti
     Raises:
         Exception: If any step in the packaging process fails
     """
-    groups = {}
+    groups = defaultdict(list)
     for region in sorted(processed_policy):
         content = json.dumps(processed_policy[region], sort_keys=True)
-        groups.setdefault(content, []).append(region)
+        groups[content].append(region)
 
     zips = {}
     for index, group_regions in enumerate(groups.values()):
@@ -356,7 +357,9 @@ def process_policies(query):
     condition_regions = [] if requested_regions else get_condition_regions(policy_instance)
     regions = requested_regions or condition_regions
 
-    account_id = get_custodian_config(region=regions[0]).account_id if regions else None
+    account_id = None
+    if regions:
+        account_id = get_custodian_config(region=regions[0]).account_id
 
     processed_policy = {
         region: build_policy(policies_dict, query, region, account_id, tags) for region in regions
