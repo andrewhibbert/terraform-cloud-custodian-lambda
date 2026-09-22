@@ -15,11 +15,6 @@ output "package_versions" {
   value       = module.cloud_custodian_lambda.package_versions
 }
 
-output "sha256_hex" {
-  description = "SHA256 hash of the Lambda package in hexadecimal format"
-  value       = module.cloud_custodian_lambda.sha256_hex
-}
-
 # Lambda Function Outputs
 output "lambda_function" {
   description = "Complete AWS Lambda function resource with all attributes"

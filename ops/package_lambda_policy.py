@@ -14,9 +14,6 @@ Expects JSON input with:
 - regions
 
 Outputs information regarding the zips created in JSON format:
-- sha256_hex
-- sha256_base64
-- zip_path
 - package_versions
 - zips: JSON map of region to zip path, hashes and tags
 - condition_regions: JSON list of regions where policy would deploy based on conditions
@@ -154,24 +151,11 @@ def process_lambda_package(query, processed_policy, condition_regions, exec_opti
     except Exception as e:  # pragma: no cover
         package_versions = {"error": f"Failed to get package versions: {e}"}
 
-    result = {
+    return {
         "package_versions": json.dumps(package_versions),
         "condition_regions": json.dumps(condition_regions),
         "zips": json.dumps(zips),
     }
-
-    if zips:
-        first = zips[sorted(zips)[0]]
-        result.update(
-            {
-                "sha256_hex": first["sha256_hex"],
-                "sha256_base64": first["sha256_base64"],
-                "zip_path": first["path"],
-                "custodian_tags": json.dumps(first["tags"]),
-            }
-        )
-
-    return result
 
 
 def process_exec_options(query):

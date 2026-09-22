@@ -258,30 +258,21 @@ def test_end_to_end_archive_creation():
     result = process_lambda_package(query, processed_policy, regions, exec_options, packages)
 
     # Verify result structure
-    assert "sha256_hex" in result
-    assert "sha256_base64" in result
-    assert "zip_path" in result
     assert "package_versions" in result
     assert "zips" in result
 
-    # Verify hashes are non-empty
-    assert len(result["sha256_hex"]) > 0
-    assert len(result["sha256_base64"]) > 0
-
-    # Verify zip file exists
-    assert os.path.exists(result["zip_path"])
-
-    # Verify the region map points at the same archive
+    # Verify the region map has non-empty hashes and an existing zip file
     zips = json.loads(result["zips"])
-    assert zips["us-east-1"]["path"] == result["zip_path"]
-    assert zips["us-east-1"]["sha256_base64"] == result["sha256_base64"]
+    assert len(zips["us-east-1"]["sha256_hex"]) > 0
+    assert len(zips["us-east-1"]["sha256_base64"]) > 0
+    assert os.path.exists(zips["us-east-1"]["path"])
 
     # Verify package versions
     package_versions = json.loads(result["package_versions"])
     assert "c7n" in package_versions
 
     # Clean up
-    os.unlink(result["zip_path"])
+    os.unlink(zips["us-east-1"]["path"])
 
 
 def test_process_lambda_package_checksum_error():

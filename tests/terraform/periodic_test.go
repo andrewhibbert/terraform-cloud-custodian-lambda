@@ -49,7 +49,6 @@ func TestPeriodicExample(t *testing.T) {
 
 	// Get SHA256 hash from first apply
 	firstSha256Base64 := terraform.Output(t, terraformOptions, "lambda_function_source_code_hash")
-	firstSha256Hex := terraform.Output(t, terraformOptions, "sha256_hex")
 	firstPackageVersions := terraform.Output(t, terraformOptions, "package_versions")
 
 	// Second apply to ensure idempotency with the SHA256 hash
@@ -57,14 +56,11 @@ func TestPeriodicExample(t *testing.T) {
 
 	// Get SHA256 hash from second apply
 	secondSha256Base64 := terraform.Output(t, terraformOptions, "lambda_function_source_code_hash")
-	secondSha256Hex := terraform.Output(t, terraformOptions, "sha256_hex")
 	secondPackageVersions := terraform.Output(t, terraformOptions, "package_versions")
 
 	// Verify hashes are identical from first and second apply which proves idempotency
 	assert.Equal(t, firstSha256Base64, secondSha256Base64,
 		"Lambda source code hash (base64) should be identical across multiple applies when no changes are made")
-	assert.Equal(t, firstSha256Hex, secondSha256Hex,
-		"Lambda source code hash (hex) should be identical across multiple applies when no changes are made")
 	assert.Equal(t, firstPackageVersions, secondPackageVersions,
 		"Package versions should be identical across multiple applies when no changes are made")
 }
