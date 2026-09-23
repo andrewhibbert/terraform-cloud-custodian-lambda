@@ -1,3 +1,7 @@
+# Mode Change
+
+This terraform allows us to validate that you can change the mode of a policy. See [mode_change_test.go](../../terraform/mode_change_test.go)
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
