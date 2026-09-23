@@ -170,6 +170,25 @@ def test_process_policies_without_packages_and_tags():
         assert "mode=periodic:version=" in tags["custodian-info"]
 
 
+def test_process_policies_falls_back_to_condition_regions():
+    """When no regions are requested, regions are derived from the policy's own conditions."""
+    query = {
+        "policies": DETAILED_POLICIES_YAML,
+        "role": "test-role",
+        "regions": json.dumps([]),
+    }
+
+    with patch("ops.package_lambda_policy.get_regions") as mock_get_regions:
+        mock_get_regions.return_value = ["us-east-1", "us-west-2", "eu-west-1"]
+        with patch(
+            "ops.package_lambda_policy.get_custodian_config", side_effect=fake_custodian_config
+        ):
+            processed_policy, condition_regions, packages = process_policies(query)
+
+    assert set(condition_regions) == {"us-east-1", "us-west-2"}
+    assert set(processed_policy) == {"us-east-1", "us-west-2"}
+
+
 def test_process_exec_options_success():
     """Test parsing correct execution_options"""
 
@@ -304,6 +323,14 @@ def test_process_exec_options_not_dict():
 
     with pytest.raises(ValidationError, match="execution_options must be a JSON object/dictionary"):
         process_exec_options(query)
+
+
+def test_get_requested_regions_invalid_json():
+    """Malformed 'regions' JSON raises a clear ValidationError."""
+    from ops.package_lambda_policy import get_requested_regions
+
+    with pytest.raises(ValidationError, match="Could not parse 'regions' as JSON"):
+        get_requested_regions({"regions": "not-json"})
 
 
 def test_get_condition_regions_with_conditions():
@@ -629,3 +656,21 @@ def test_get_custodian_config_without_account_id():
 
         with pytest.raises(ValidationError, match="sts:GetCallerIdentity"):
             get_custodian_config(region="eu-west-1")
+
+
+def test_get_custodian_config_resolves_account_id():
+    """A config with a resolvable account id is returned with region and account_id populated."""
+    from ops.common import get_custodian_config
+
+    def fake_initialize(config):
+        config.account_id = config.account_id or "123456789012"
+        return config
+
+    with patch("ops.common.AWS") as mock_aws:
+        mock_aws.return_value.initialize.side_effect = fake_initialize
+
+        config = get_custodian_config(region="eu-west-1")
+
+    assert config.region == "eu-west-1"
+    assert config.regions == ("eu-west-1",)
+    assert config.account_id == "123456789012"
