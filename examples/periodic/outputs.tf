@@ -15,6 +15,11 @@ output "package_versions" {
   value       = module.cloud_custodian_lambda.package_versions
 }
 
+output "package_lambda_result" {
+  description = "Full output from package lambda step"
+  value       = module.cloud_custodian_lambda.package_lambda_result
+}
+
 # Lambda Function Outputs
 output "lambda_function" {
   description = "Complete AWS Lambda function resource with all attributes"

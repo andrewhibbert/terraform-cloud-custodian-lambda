@@ -49,6 +49,7 @@ Configuration in this directory creates an example cloud custodian periodic poli
 | <a name="output_lambda_function_source_code_hash"></a> [lambda\_function\_source\_code\_hash](#output\_lambda\_function\_source\_code\_hash) | Base64-encoded representation of raw SHA-256 sum of the zip file |
 | <a name="output_lambda_function_tags"></a> [lambda\_function\_tags](#output\_lambda\_function\_tags) | The name of the lambda function |
 | <a name="output_mode_type"></a> [mode\_type](#output\_mode\_type) | The type of Cloud Custodian mode (periodic, cloudtrail, config-rule, etc.) |
+| <a name="output_package_lambda_result"></a> [package\_lambda\_result](#output\_package\_lambda\_result) | Full output from package lambda step |
 | <a name="output_package_versions"></a> [package\_versions](#output\_package\_versions) | JSON string containing versions of all packages included in the Lambda deployment |
 | <a name="output_periodic_event_rule_name"></a> [periodic\_event\_rule\_name](#output\_periodic\_event\_rule\_name) | The name of the CloudWatch Event Rule for periodic mode |
 | <a name="output_periodic_schedule_expression"></a> [periodic\_schedule\_expression](#output\_periodic\_schedule\_expression) | The schedule expression for periodic mode |

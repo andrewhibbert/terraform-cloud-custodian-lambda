@@ -74,7 +74,10 @@ func TestPeriodicExample(t *testing.T) {
 	assert.Contains(t, lambdaTags["custodian-info"], "mode=periodic", "The 'custodian-info' tag should include the mode.")
 	assert.Contains(t, lambdaTags["custodian-info"], "version", "The 'custodian-info' tag should include the version.")
 
-	// Ensure expansion of {account_id} for image OwnerId worked
+	// The policy's OwnerId filter uses the {account_id} policy variable, which
+	// package_lambda_policy.py resolves per-region at package time. Unzip the
+	// deployed archive and confirm it was expanded to a real account id, not
+	// left as the literal placeholder.
 	packageLambdaResult := terraform.OutputMap(t, terraformOptions, "package_lambda_result")
 
 	var zips map[string]struct {
