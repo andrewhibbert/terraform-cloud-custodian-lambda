@@ -273,24 +273,24 @@ def add_tags_to_policy(policy_list, tags):
     return policy_list
 
 
-def preserve_output_dir(policy_data, original_data):
+def restore_output_dir(policy_data, unexpanded_data):
     """Restore output_dir, which Cloud Custodian resolves at runtime not at package time.
 
     Args:
         policy_data: Policy dict with variables expanded
-        original_data: Copy of the policy dict taken before expansion
+        unexpanded_data: Copy of the policy dict taken before expansion
 
     Returns:
         dict: Policy dict with the original output_dir restored
     """
-    original = original_data.get("mode", {}).get("execution-options", {})
+    original = unexpanded_data.get("mode", {}).get("execution-options", {})
     if "output_dir" in original:
         policy_data["mode"]["execution-options"]["output_dir"] = original["output_dir"]
 
     return policy_data
 
 
-def build_policy(policies_dict, query, region, account_id, tags):
+def expand_policy(policies_dict, query, region, account_id, tags):
     """Expand a policy's variables for a single region.
 
     Args:
@@ -306,11 +306,11 @@ def build_policy(policies_dict, query, region, account_id, tags):
     config = get_custodian_config(region=region, account_id=account_id)
     policy_instance = validate_with_custodian(copy.deepcopy(policies_dict), config)
 
-    original_data = copy.deepcopy(policy_instance.data)
+    unexpanded_data = copy.deepcopy(policy_instance.data)
     policy_instance.expand_variables(policy_instance.get_variables())
 
     policy_list = add_tags_to_policy(
-        [preserve_output_dir(policy_instance.data, original_data)], tags
+        [restore_output_dir(policy_instance.data, unexpanded_data)], tags
     )
     policy_list[0]["mode"]["role"] = query["role"]
 
@@ -354,7 +354,9 @@ def process_policies(query):
     tags = get_tags([policy_instance.data], query)
 
     requested_regions = get_requested_regions(query)
-    condition_regions = [] if requested_regions else get_condition_regions(policy_instance)
+    condition_regions = []
+    if not requested_regions:
+        condition_regions = get_condition_regions(policy_instance)
     regions = requested_regions or condition_regions
 
     account_id = None
@@ -362,7 +364,7 @@ def process_policies(query):
         account_id = get_custodian_config(region=regions[0]).account_id
 
     processed_policy = {
-        region: build_policy(policies_dict, query, region, account_id, tags) for region in regions
+        region: expand_policy(policies_dict, query, region, account_id, tags) for region in regions
     }
 
     return processed_policy, condition_regions, packages
