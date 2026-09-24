@@ -568,8 +568,10 @@ def test_process_policies_expands_account_id_and_region():
         assert values["tag:Account"] == "123456789012"
         assert values["tag:Region"] == region
 
-    lookups = [c for c in mock_config.call_args_list if not c.kwargs.get("account_id")]
-    assert len(lookups) == 1
+    # get_custodian_config is called once with no account_id (to resolve it), then once per
+    # region with that resolved value passed in - only the first should be missing account_id.
+    resolving_calls = [c for c in mock_config.call_args_list if not c.kwargs.get("account_id")]
+    assert len(resolving_calls) == 1
 
 
 def test_process_policies_preserves_output_dir_for_runtime_resolution():
@@ -589,7 +591,8 @@ def test_process_lambda_package_one_archive_per_distinct_policy():
     from ops.package_lambda_policy import process_lambda_package
 
     regions = ["eu-west-1", "us-east-1"]
-    processed_policy, _, packages = process_variable_policies(regions)
+    processed_policy, condition_regions, packages = process_variable_policies(regions)
+    exec_options = {}
 
     result = process_lambda_package(
         {
@@ -599,8 +602,8 @@ def test_process_lambda_package_one_archive_per_distinct_policy():
             "regions": json.dumps(regions),
         },
         processed_policy,
-        regions,
-        {},
+        condition_regions,
+        exec_options,
         packages,
     )
     zips = json.loads(result["zips"])
@@ -619,9 +622,21 @@ def test_process_lambda_package_shares_archive_when_content_matches():
     regions = ["eu-west-1", "us-east-1"]
     policy_list = [SIMPLE_PERIODIC_POLICY_DICT]
     processed_policy = {region: policy_list for region in regions}
+    condition_regions = []
+    exec_options = {}
+    packages = []
 
     result = process_lambda_package(
-        {"function_name": "custodian-shared"}, processed_policy, regions, {}, []
+        {
+            "policies": SIMPLE_PERIODIC_POLICIES_YAML,
+            "role": "arn:aws:iam::123456789012:role/custodian-role",
+            "function_name": "custodian-shared",
+            "regions": json.dumps(regions),
+        },
+        processed_policy,
+        condition_regions,
+        exec_options,
+        packages,
     )
     zips = json.loads(result["zips"])
 
