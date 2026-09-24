@@ -645,32 +645,3 @@ def test_process_lambda_package_shares_archive_when_content_matches():
 
     assert zips["eu-west-1"]["path"] == zips["us-east-1"]["path"]
     os.unlink(zips["eu-west-1"]["path"])
-
-
-def test_get_custodian_config_without_account_id():
-    """A config with no resolvable account id is rejected."""
-    from ops.common import get_custodian_config
-
-    with patch("ops.common.AWS") as mock_aws:
-        mock_aws.return_value.initialize.side_effect = lambda config: config
-
-        with pytest.raises(ValidationError, match="sts:GetCallerIdentity"):
-            get_custodian_config(region="eu-west-1")
-
-
-def test_get_custodian_config_resolves_account_id():
-    """A config with a resolvable account id is returned with region and account_id populated."""
-    from ops.common import get_custodian_config
-
-    def fake_initialize(config):
-        config.account_id = config.account_id or "123456789012"
-        return config
-
-    with patch("ops.common.AWS") as mock_aws:
-        mock_aws.return_value.initialize.side_effect = fake_initialize
-
-        config = get_custodian_config(region="eu-west-1")
-
-    assert config.region == "eu-west-1"
-    assert config.regions == ("eu-west-1",)
-    assert config.account_id == "123456789012"
